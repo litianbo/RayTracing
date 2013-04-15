@@ -86,14 +86,18 @@ double dot(double *d1, double *d2){
 	return d1[0]*d2[0] + d1[1]*d2[1] + d1[2]*d2[2];
 }
 void normalize(double *d){
-	double length = sqrt(abs(dot(d,d)));
-	d[0] = d[0]/length;
-	d[1] = d[1]/length;
-	d[2] = d[2]/length;
+	double d0 = d[0]/sqrt(pow(d[0],2)+pow(d[1],2)+pow(d[2],2));
+	double d1 = d[1]/sqrt(pow(d[0],2)+pow(d[1],2)+pow(d[2],2));
+	double d2 = d[2]/sqrt(pow(d[0],2)+pow(d[1],2)+pow(d[2],2));
+	d[0] = d0;
+	d[1] = d1;
+	d[2] = d2;
+
 }
 //MODIFY THIS FUNCTION
 void draw_scene()
 {
+
 	double x,y;
 	double w,h;
 	//simple output
@@ -112,7 +116,7 @@ void draw_scene()
 		glBegin(GL_POINTS);
 		for(int j=0;j< HEIGHT;j++)
 		{
-			double ray[3] = {x+w*i,y-h*j,-1};
+			double ray[3] = {(x+w*i)-cameraPos[0],y-h*j-cameraPos[1],-1-cameraPos[2]};
 			normalize(ray);
 
 			double b = 2 * (ray[0]*(cameraPos[0]-spheres[0].position
@@ -129,13 +133,14 @@ void draw_scene()
 				if(t0 >= 0 && t1>=0){
 					double t = min(t0,t1);
 					double origin[3] = {cameraPos[0] + t* ray[0],cameraPos[1] + t* ray[1],cameraPos[2] + t* ray[2]};
-					ray[0] = lights[0].position[0] - cameraPos[0] + t* ray[0];
-					ray[1] = lights[0].position[1] - cameraPos[1] + t* ray[1];
-					ray[2] = lights[0].position[2] - cameraPos[2] + t* ray[2];
-					normalize(ray);
-					b =  2 * (ray[0]*(origin[0]-spheres[0].position
-						[0])+ray[1]*(origin[1] -spheres[0].position
-						[1])+ray[2]*(origin[2] -spheres[0].position
+					double shadowRay[3];
+					shadowRay[0] = lights[0].position[0] - (cameraPos[0] + t* ray[0]);
+					shadowRay[1] = lights[0].position[1] - (cameraPos[1] + t* ray[1]);
+					shadowRay[2] = lights[0].position[2] - (cameraPos[2] + t* ray[2]);
+					normalize(shadowRay);
+					b =  2 * (shadowRay[0]*(origin[0]-spheres[0].position
+						[0])+shadowRay[1]*(origin[1] -spheres[0].position
+						[1])+shadowRay[2]*(origin[2] -spheres[0].position
 						[2]));
 					c = pow((double)(origin[0]-spheres[0].position
 						[0]),2) + pow((double)(origin[1]-spheres[0].position
@@ -144,21 +149,22 @@ void draw_scene()
 					if((b*b - 4*c)>=0){
 						t0 = (-b+sqrt(b*b-4*c))/2;
 						t1 = (-b-sqrt(b*b-4*c))/2;
+
 						if(t1 * t0 <=0.0001){
-							double circleNormal[3] = {origin[0]-spheres[0].position[0],origin[1]-spheres[0].position[1],origin[3]-spheres[0].position[3]};
+							double circleNormal[3] = {origin[0]-spheres[0].position[0],origin[1]-spheres[0].position[1],origin[2]-spheres[0].position[2]};
 							double vectorToViewer[3] = {cameraPos[0]-origin[0],cameraPos[1]-origin[1],cameraPos[2]-origin[2]};
 							normalize(circleNormal);
 							normalize(vectorToViewer);
 							double lDotN;
 							double rDotV;
-							if(dot(ray,circleNormal)<0){
+							if(dot(shadowRay,circleNormal)<0){
 								lDotN = 0;
 							}
 							else {
-								lDotN = dot(ray,circleNormal);
+								lDotN = dot(shadowRay,circleNormal);
 							}
-							double reflection[3] = {ray[0] - 2*circleNormal[0]*lDotN,
-								ray[1] - 2*circleNormal[1]*lDotN,ray[2]- 2*circleNormal[2]*lDotN};
+							double reflection[3] = {2*circleNormal[0]*lDotN - shadowRay[0],
+								2*circleNormal[1]*lDotN - shadowRay[1],  2*circleNormal[2]*lDotN - shadowRay[2]};
 							normalize(reflection);
 							if(dot(reflection,vectorToViewer)<0){
 								rDotV = 0;
@@ -169,19 +175,30 @@ void draw_scene()
 							//normalize(lights[0].color);
 							//normalize(spheres[0].color_diffuse);
 							//normalize(spheres[0].color_specular);
-							double Ir,Ig,Ib;
-							for(int i = 0 ; i < sizeof(lights); i ++){
-								Ir =  lights[0].color[0] * ((spheres[0].color_diffuse[0] * lDotN) + 
-									spheres[0].color_specular[0] * pow(rDotV,spheres[0].shininess));
-								Ig =  lights[0].color[1] * ((spheres[0].color_diffuse[1] * lDotN)
-									+ spheres[0].color_specular[1] * pow(rDotV,spheres[0].shininess));
-								Ib =  lights[0].color[2] * ((spheres[0].color_diffuse[2] * lDotN) 
-									+spheres[0].color_specular[2] *  pow(rDotV,spheres[0].shininess));
+							double lR,lG,lB;
+
+							lR =  lights[0].color[0] * ((spheres[0].color_diffuse[0] * lDotN) + 
+								spheres[0].color_specular[0] * pow(rDotV,spheres[0].shininess));
+							lG =  lights[0].color[1] * ((spheres[0].color_diffuse[1] * lDotN)
+								+ spheres[0].color_specular[1] * pow(rDotV,spheres[0].shininess));
+							lB =  lights[0].color[2] * ((spheres[0].color_diffuse[2] * lDotN) 
+								+spheres[0].color_specular[2] *  pow(rDotV,spheres[0].shininess));
+
+
+							double lighting[3] = {lR,lG,lB};
+							//normalize(lighting); 
+							lighting[0] = lighting[0] + ambient_light[0];
+							lighting[1] = lighting[1] + ambient_light[1];
+							lighting[2] = lighting[2] + ambient_light[2];
+							if(lighting[0] > 1){
+								lighting[0]=1;
 							}
-							double lighting[3] = {Ir,Ig,Ib};
-							//normalize(lighting);
-							GLfloat ambientColor[] = {ambient_light[0],ambient_light[1], ambient_light[2], 1.0f}; //Color(0.2, 0.2, 0.2)
-							glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientColor);
+							if(lighting[1] > 1){
+								lighting[1]=1;
+							}
+							if(lighting[2] > 1){
+								lighting[2]=1;
+							}
 							plot_pixel(i,j,lighting[0]*255,lighting[1]*255,lighting[2]*255);
 						}
 
@@ -402,9 +419,14 @@ void init()
 	glOrtho(0,WIDTH,0,HEIGHT,1,-1);
 	glMatrixMode(GL_MODELVIEW);
 	glLoadIdentity();
+	glEnable(GL_LIGHTING);
+	glEnable(GL_LIGHT0); 
+	GLfloat ambientColor[] = {ambient_light[0],ambient_light[1], ambient_light[2], 1.0f}; //Color(0.2, 0.2, 0.2)
+	glLightModelfv(GL_LIGHT_MODEL_AMBIENT, ambientColor);
 	glClearColor(1.0,1.0,1.0,0.0);
 	glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
-
+	glDisable(GL_LIGHT0);
+	glDisable(GL_LIGHTING);
 }
 
 void idle()
