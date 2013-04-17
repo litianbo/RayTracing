@@ -19,7 +19,6 @@ Name: <Your name here>
 #define MAX_LIGHTS 10
 
 char *filename=0;
-float vector[3];
 //different display modes
 #define MODE_DISPLAY 1
 #define MODE_JPEG 2
@@ -85,6 +84,18 @@ double computeC(double *d1,double d2){
 double dot(double *d1, double *d2){
 	return d1[0]*d2[0] + d1[1]*d2[1] + d1[2]*d2[2];
 }
+double dot(double d1, double *d2){
+	return d1*d2[0] + d1*d2[1] + d1*d2[2];
+}
+double crossX(double *d1,double *d2){
+	return d1[2]*d2[3]-d1[3]*d2[2];
+}
+double crossY(double *d1,double *d2){
+	return d1[3]*d2[1]-d1[1]*d2[3];
+}
+double crossZ(double *d1,double *d2){
+	return d1[1]*d2[2]-d1[2]*d2[1];
+}
 void normalize(double *d){
 	double d0 = d[0]/sqrt(pow(d[0],2)+pow(d[1],2)+pow(d[2],2));
 	double d1 = d[1]/sqrt(pow(d[0],2)+pow(d[1],2)+pow(d[2],2));
@@ -108,7 +119,7 @@ void draw_scene()
 	w = (double)x/WIDTH;
 	h = (double)y/HEIGHT;
 	x = - ((double)WIDTH/HEIGHT) * tan(fov*3.14/(2*180));
-	y = tan(fov*3.14/(2*180));
+	y = -tan(fov*3.14/(2*180));
 	//gluLookAt(cameraPos[0],cameraPos[1],cameraPos[2],spheres[0].position[0],spheres[0].position[1],spheres[0].position[2],0,1,0);
 	for(int i=0; i<WIDTH; i++)
 	{
@@ -116,130 +127,227 @@ void draw_scene()
 		glBegin(GL_POINTS);
 		for(int j=0;j< HEIGHT;j++)
 		{
-			double ray[3] = {(x+w*i)-cameraPos[0],y-h*j-cameraPos[1],-1-cameraPos[2]};
+			double ray[3] = {(x+w*i)-cameraPos[0],y+h*j-cameraPos[1],-1-cameraPos[2]};
 			normalize(ray);
+			if(num_triangles>0){
+				for(int m=0; m < num_triangles; m ++){
+					double vector1[3] = {triangles[m].v[0].position[0] - triangles[m].v[1].position[0], 
+						triangles[m].v[0].position[1]-triangles[m].v[1].position[1],
+						triangles[m].v[0].position[2]-triangles[m].v[1].position[2]};
+					double vector2[3] = {triangles[m].v[0].position[0] - triangles[m].v[2].position[0], 
+						triangles[m].v[0].position[1]-triangles[m].v[2].position[1],
+						triangles[m].v[0].position[2]-triangles[m].v[2].position[2]};
+					double normal[3] = {crossX(vector1,vector2),crossY(vector1,vector2),crossZ(vector1,vector2)};
+					normalize(normal);
+					double n[3] = {triangles[m].v[0].normal[0],triangles[m].v[0].normal[1],triangles[m].v[0].normal[2]};
+					normalize(n);
 
-			double b = 2 * (ray[0]*(cameraPos[0]-spheres[0].position
-				[0])+ray[1]*(cameraPos[1]-spheres[0].position
-				[1])+ray[2]*(cameraPos[2]-spheres[0].position
-				[2]));
-			double c = pow((double)(cameraPos[0]-spheres[0].position
-				[0]),2) + pow((double)(cameraPos[1]-spheres[0].position
-				[1]),2)+ pow((double)(cameraPos[2]-spheres[0].position
-				[2]),2) - pow((double)spheres[0].radius,2);
-			if((b*b-4*c)>=0){
-				double t0 = (-b+sqrt(b*b-4*c))/2;
-				double t1 = (-b-sqrt(b*b-4*c))/2;
-				if(t0 >= 0 && t1>=0){
-					double t = min(t0,t1);
-					double origin[3] = {cameraPos[0] + t* ray[0],cameraPos[1] + t* ray[1],cameraPos[2] + t* ray[2]};
-					double shadowRay[3];
-					shadowRay[0] = lights[0].position[0] - (cameraPos[0] + t* ray[0]);
-					shadowRay[1] = lights[0].position[1] - (cameraPos[1] + t* ray[1]);
-					shadowRay[2] = lights[0].position[2] - (cameraPos[2] + t* ray[2]);
-					normalize(shadowRay);
-					b =  2 * (shadowRay[0]*(origin[0]-spheres[0].position
-						[0])+shadowRay[1]*(origin[1] -spheres[0].position
-						[1])+shadowRay[2]*(origin[2] -spheres[0].position
-						[2]));
-					c = pow((double)(origin[0]-spheres[0].position
-						[0]),2) + pow((double)(origin[1]-spheres[0].position
-						[1]),2)+ pow((double)(origin[2]-spheres[0].position
-						[2]),2) - pow((double)spheres[0].radius,2);
-					if((b*b - 4*c)>=0){
-						t0 = (-b+sqrt(b*b-4*c))/2;
-						t1 = (-b-sqrt(b*b-4*c))/2;
+					double d = -1*dot(n,triangles[m].v[0].position);
 
-						if(t1 * t0 <=0.0001){
-							double circleNormal[3] = {origin[0]-spheres[0].position[0],origin[1]-spheres[0].position[1],origin[2]-spheres[0].position[2]};
-							double vectorToViewer[3] = {cameraPos[0]-origin[0],cameraPos[1]-origin[1],cameraPos[2]-origin[2]};
-							normalize(circleNormal);
-							normalize(vectorToViewer);
-							double lDotN;
-							double rDotV;
-							if(dot(shadowRay,circleNormal)<0){
-								lDotN = 0;
-							}
-							else {
-								lDotN = dot(shadowRay,circleNormal);
-							}
-							double reflection[3] = {2*circleNormal[0]*lDotN - shadowRay[0],
-								2*circleNormal[1]*lDotN - shadowRay[1],  2*circleNormal[2]*lDotN - shadowRay[2]};
-							normalize(reflection);
-							if(dot(reflection,vectorToViewer)<0){
-								rDotV = 0;
-							}
-							else {
-								rDotV = dot(reflection,vectorToViewer);
-							}
-							//normalize(lights[0].color);
-							//normalize(spheres[0].color_diffuse);
-							//normalize(spheres[0].color_specular);
-							double lR,lG,lB;
+					if(dot(ray,n)!=0){
 
-							lR =  lights[0].color[0] * ((spheres[0].color_diffuse[0] * lDotN) + 
-								spheres[0].color_specular[0] * pow(rDotV,spheres[0].shininess));
-							lG =  lights[0].color[1] * ((spheres[0].color_diffuse[1] * lDotN)
-								+ spheres[0].color_specular[1] * pow(rDotV,spheres[0].shininess));
-							lB =  lights[0].color[2] * ((spheres[0].color_diffuse[2] * lDotN) 
-								+spheres[0].color_specular[2] *  pow(rDotV,spheres[0].shininess));
+						double t = -(dot(cameraPos,ray)+d)/(dot(n,ray));
+						if(t>0){
+							double origin[3] = {cameraPos[0] + ray[0]*t,cameraPos[0] + ray[1]*t,cameraPos[0] + ray[2]*t};
+							double areaTri = 0.5 * ((triangles[m].v[1].position[0] - triangles[m].v[0].position[0]) 
+								* (triangles[m].v[2].position[1] - triangles[m].v[0].position[1]) 
+								- (triangles[m].v[2].position[0] - triangles[m].v[0].position[0]) 
+								* (triangles[m].v[1].position[1] - triangles[m].v[0].position[1]));
+							double areaOBC = 0.5 * ((triangles[m].v[1].position[0] -origin[0]) 
+								* (triangles[m].v[2].position[1]- origin[1]) 
+								- (triangles[m].v[2].position[0] - origin[0]) 
+								* (triangles[m].v[1].position[1] - origin[1]));
+							double areaAOC =  0.5 * ((origin[0] - triangles[m].v[0].position[0]) 
+								* (triangles[m].v[2].position[1] - triangles[m].v[0].position[1]) 
+								- (triangles[m].v[2].position[0] - triangles[m].v[0].position[0]) 
+								* (origin[1] - triangles[m].v[0].position[1]));
+							double areaABO = 0.5 * ((triangles[m].v[1].position[0] - triangles[m].v[0].position[0]) 
+								* (origin[1] - triangles[m].v[0].position[1]) 
+								- (origin[0] - triangles[m].v[0].position[0]) 
+								* (triangles[m].v[1].position[1] - triangles[m].v[0].position[1]));
+							if(areaABO/areaTri > 0 && areaABO/areaTri < 1 
+								&& areaOBC/areaTri > 0 && areaOBC/areaTri<1 
+								&& areaAOC/areaTri > 0 && areaAOC/areaTri < 1 ){
+									double shadowRay[3] = {lights[0].position[0] - (cameraPos[0] + t* ray[0]),
+										lights[0].position[1] - (cameraPos[1] + t* ray[1]),
+										lights[0].position[2] - (cameraPos[2] + t* ray[2])};
+									double vectorToViewer[3] = {cameraPos[0]-origin[0],cameraPos[1]-origin[1],cameraPos[2]-origin[2]};
+									normalize(shadowRay);
+									normalize(vectorToViewer);
+									double lDotN,rDotV;
+									if(dot(shadowRay,normal)<0){
+										lDotN = 0;
+									}
+									else {
+										lDotN = dot(shadowRay,normal);
+									}
+									double reflection[3] = {2*normal[0]*lDotN - shadowRay[0],
+										2*normal[1]*lDotN - shadowRay[1],  2*normal[2]*lDotN - shadowRay[2]};
+									normalize(reflection);
+									if(dot(reflection,vectorToViewer)<0){
+										rDotV = 0;
+									}
+									else {
+										rDotV = dot(reflection,vectorToViewer);
+									}
+
+									double lR,lG,lB;
+
+									lR =  lights[0].color[0] * ((triangles[m].v[0].color_diffuse[0] * lDotN) + 
+										triangles[m].v[0].color_specular[0] * pow(rDotV,triangles[m].v[0].shininess));
+									lG =  lights[0].color[1] * ((triangles[m].v[0].color_diffuse[1] * lDotN)
+										+ triangles[m].v[0].color_specular[1] * pow(rDotV,triangles[m].v[0].shininess));
+									lB =  lights[0].color[2] * ((triangles[m].v[0].color_diffuse[2] * lDotN) 
+										+triangles[m].v[0].color_specular[2] *  pow(rDotV,triangles[m].v[0].shininess));
 
 
-							double lighting[3] = {lR,lG,lB};
-							//normalize(lighting); 
-							lighting[0] = lighting[0] + ambient_light[0];
-							lighting[1] = lighting[1] + ambient_light[1];
-							lighting[2] = lighting[2] + ambient_light[2];
-							if(lighting[0] > 1){
-								lighting[0]=1;
+									double lighting[3] = {lR,lG,lB};
+									//normalize(lighting); 
+									lighting[0] = lighting[0] + ambient_light[0];
+									lighting[1] = lighting[1] + ambient_light[1];
+									lighting[2] = lighting[2] + ambient_light[2];
+									if(lighting[0] > 1){
+										lighting[0]=1;
+									}
+									if(lighting[1] > 1){
+										lighting[1]=1;
+									}
+									if(lighting[2] > 1){
+										lighting[2]=1;
+									}
+									plot_pixel(i,j,lighting[0]*255,lighting[1]*255,lighting[2]*255);
+
 							}
-							if(lighting[1] > 1){
-								lighting[1]=1;
-							}
-							if(lighting[2] > 1){
-								lighting[2]=1;
-							}
-							plot_pixel(i,j,lighting[0]*255,lighting[1]*255,lighting[2]*255);
+
 						}
-
 					}
 
 				}
-				else if(t0>=0 && t1<=0){
-					double t = t0;
-					ray[0] = lights[0].position[0] - cameraPos[0] + t* ray[0];
-					ray[1] = lights[0].position[1] - cameraPos[0] + t* ray[1];
-					ray[2] = lights[0].position[2] - cameraPos[0] + t* ray[2];
-					normalize(ray);
-					b =  2 * (ray[0]*(lights[0].position[0]-spheres[0].position
-						[0])+ray[1]*(lights[0].position[1]-spheres[0].position
-						[1])+ray[2]*(lights[0].position[2]-spheres[0].position
-						[2]));
-					c = pow((double)(lights[0].position[0]-spheres[0].position
-						[0]),2) + pow((double)(lights[0].position[1]-spheres[0].position
-						[1]),2)+ pow((double)(lights[0].position[2]-spheres[0].position
-						[2]),2) - pow((double)spheres[0].radius,2);
-					if((int)(b*b - 4*c)==0)
-						plot_pixel(i,j,255,0,0);
-				}
-				else if(t1>=0 && t0<=0){
-					double t = t1;
-					ray[0] = lights[0].position[0] - cameraPos[0] + t* ray[0];
-					ray[1] = lights[0].position[1] - cameraPos[0] + t* ray[1];
-					ray[2] = lights[0].position[2] - cameraPos[0] + t* ray[2];
-					normalize(ray);
-					b =  2 * (ray[0]*(lights[0].position[0]-spheres[0].position
-						[0])+ray[1]*(lights[0].position[1]-spheres[0].position
-						[1])+ray[2]*(lights[0].position[2]-spheres[0].position
-						[2]));
-					c = pow((double)(lights[0].position[0]-spheres[0].position
-						[0]),2) + pow((double)(lights[0].position[1]-spheres[0].position
-						[1]),2)+ pow((double)(lights[0].position[2]-spheres[0].position
-						[2]),2) - pow((double)spheres[0].radius,2);
-					if((int)(b*b - 4*c)==0)
-						plot_pixel(i,j,255,0,0);
-				}
 			}
+			if(num_spheres>0){
+				double b = 2 * (ray[0]*(cameraPos[0]-spheres[0].position
+					[0])+ray[1]*(cameraPos[1]-spheres[0].position
+					[1])+ray[2]*(cameraPos[2]-spheres[0].position
+					[2]));
+				double c = pow((double)(cameraPos[0]-spheres[0].position
+					[0]),2) + pow((double)(cameraPos[1]-spheres[0].position
+					[1]),2)+ pow((double)(cameraPos[2]-spheres[0].position
+					[2]),2) - pow((double)spheres[0].radius,2);
+				if((b*b-4*c)>=0){
+					double t0 = (-b+sqrt(b*b-4*c))/2;
+					double t1 = (-b-sqrt(b*b-4*c))/2;
+					if(t0 >= 0 && t1>=0){
+						double t = min(t0,t1);
+						double origin[3] = {cameraPos[0] + t* ray[0],cameraPos[1] + t* ray[1],cameraPos[2] + t* ray[2]};
+						double shadowRay[3];
+						shadowRay[0] = lights[0].position[0] - (cameraPos[0] + t* ray[0]);
+						shadowRay[1] = lights[0].position[1] - (cameraPos[1] + t* ray[1]);
+						shadowRay[2] = lights[0].position[2] - (cameraPos[2] + t* ray[2]);
+						normalize(shadowRay);
+						b =  2 * (shadowRay[0]*(origin[0]-spheres[0].position
+							[0])+shadowRay[1]*(origin[1] -spheres[0].position
+							[1])+shadowRay[2]*(origin[2] -spheres[0].position
+							[2]));
+						c = pow((double)(origin[0]-spheres[0].position
+							[0]),2) + pow((double)(origin[1]-spheres[0].position
+							[1]),2)+ pow((double)(origin[2]-spheres[0].position
+							[2]),2) - pow((double)spheres[0].radius,2);
+						if((b*b - 4*c)>=0){
+							t0 = (-b+sqrt(b*b-4*c))/2;
+							t1 = (-b-sqrt(b*b-4*c))/2;
+
+							if(t1 * t0 <=0.0001){
+								double circleNormal[3] = {origin[0]-spheres[0].position[0],origin[1]-spheres[0].position[1],origin[2]-spheres[0].position[2]};
+								double vectorToViewer[3] = {cameraPos[0]-origin[0],cameraPos[1]-origin[1],cameraPos[2]-origin[2]};
+								normalize(circleNormal);
+								normalize(vectorToViewer);
+								double lDotN;
+								double rDotV;
+								if(dot(shadowRay,circleNormal)<0){
+									lDotN = 0;
+								}
+								else {
+									lDotN = dot(shadowRay,circleNormal);
+								}
+								double reflection[3] = {2*circleNormal[0]*lDotN - shadowRay[0],
+									2*circleNormal[1]*lDotN - shadowRay[1],  2*circleNormal[2]*lDotN - shadowRay[2]};
+								normalize(reflection);
+								if(dot(reflection,vectorToViewer)<0){
+									rDotV = 0;
+								}
+								else {
+									rDotV = dot(reflection,vectorToViewer);
+								}
+								//normalize(lights[0].color);
+								//normalize(spheres[0].color_diffuse);
+								//normalize(spheres[0].color_specular);
+								double lR,lG,lB;
+
+								lR =  lights[0].color[0] * ((spheres[0].color_diffuse[0] * lDotN) + 
+									spheres[0].color_specular[0] * pow(rDotV,spheres[0].shininess));
+								lG =  lights[0].color[1] * ((spheres[0].color_diffuse[1] * lDotN)
+									+ spheres[0].color_specular[1] * pow(rDotV,spheres[0].shininess));
+								lB =  lights[0].color[2] * ((spheres[0].color_diffuse[2] * lDotN) 
+									+spheres[0].color_specular[2] *  pow(rDotV,spheres[0].shininess));
+
+
+								double lighting[3] = {lR,lG,lB};
+								//normalize(lighting); 
+								lighting[0] = lighting[0] + ambient_light[0];
+								lighting[1] = lighting[1] + ambient_light[1];
+								lighting[2] = lighting[2] + ambient_light[2];
+								if(lighting[0] > 1){
+									lighting[0]=1;
+								}
+								if(lighting[1] > 1){
+									lighting[1]=1;
+								}
+								if(lighting[2] > 1){
+									lighting[2]=1;
+								}
+								plot_pixel(i,j,lighting[0]*255,lighting[1]*255,lighting[2]*255);
+							}
+
+						}
+					}
+				}/*
+				 else if(t0>=0 && t1<=0){
+				 double t = t0;
+				 ray[0] = lights[0].position[0] - cameraPos[0] + t* ray[0];
+				 ray[1] = lights[0].position[1] - cameraPos[0] + t* ray[1];
+				 ray[2] = lights[0].position[2] - cameraPos[0] + t* ray[2];
+				 normalize(ray);
+				 b =  2 * (ray[0]*(lights[0].position[0]-spheres[0].position
+				 [0])+ray[1]*(lights[0].position[1]-spheres[0].position
+				 [1])+ray[2]*(lights[0].position[2]-spheres[0].position
+				 [2]));
+				 c = pow((double)(lights[0].position[0]-spheres[0].position
+				 [0]),2) + pow((double)(lights[0].position[1]-spheres[0].position
+				 [1]),2)+ pow((double)(lights[0].position[2]-spheres[0].position
+				 [2]),2) - pow((double)spheres[0].radius,2);
+				 if((int)(b*b - 4*c)==0)
+				 plot_pixel(i,j,255,0,0);
+				 }
+				 else if(t1>=0 && t0<=0){
+				 double t = t1;
+				 ray[0] = lights[0].position[0] - cameraPos[0] + t* ray[0];
+				 ray[1] = lights[0].position[1] - cameraPos[0] + t* ray[1];
+				 ray[2] = lights[0].position[2] - cameraPos[0] + t* ray[2];
+				 normalize(ray);
+				 b =  2 * (ray[0]*(lights[0].position[0]-spheres[0].position
+				 [0])+ray[1]*(lights[0].position[1]-spheres[0].position
+				 [1])+ray[2]*(lights[0].position[2]-spheres[0].position
+				 [2]));
+				 c = pow((double)(lights[0].position[0]-spheres[0].position
+				 [0]),2) + pow((double)(lights[0].position[1]-spheres[0].position
+				 [1]),2)+ pow((double)(lights[0].position[2]-spheres[0].position
+				 [2]),2) - pow((double)spheres[0].radius,2);
+				 if((int)(b*b - 4*c)==0)
+				 plot_pixel(i,j,255,0,0);
+				 }*/
+			}
+
+
 
 			//plot_pixel(x,y,255,255,255);
 		}
